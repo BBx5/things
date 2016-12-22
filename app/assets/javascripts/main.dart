@@ -23,6 +23,109 @@ enum Mode {
   rw,
 }
 
+class Ticking {
+  int id;
+  DateTime start;
+  DateTime end;
+
+  Future syncFromDB(){
+
+  }
+}
+
+class Actions{
+  static void toggleTick(Event e) {
+    RadioButtonInputElement btn = e.target;
+    if (btn.checked) {
+      tock();
+    } else {
+      tick();
+    }
+  }
+
+  static void doneOrUndoneTodo(Event e) {
+    CheckboxInputElement box = e.target;
+    var key = box.id;
+    Todo todo = todos[int.parse(key)];
+    if (box.checked) {
+      todo.finish().then((_) {
+        box.checked = true;
+      });
+    } else {
+      todo.undone().then((_) {
+        box.checked = false;
+      });
+    }
+  }
+
+  static void addTodo(Event e){
+    var name = thingInput.value;
+    thingInput.value = '';
+    Todo todo = new Todo(name);
+    todo.store().then((Todo todo) {
+      todos[todo.key] = todo;
+      UI.renderTodos(todos);
+    });
+  }
+  static void clearTodo(Event e) {
+    Todo.clear().then((_) {
+      todos.clear();
+      UI.renderTodos(todos);
+    });
+  }
+
+}
+
+class UI{
+  static void refresh(){
+
+  }
+
+  static void toggleShowAll(Event e) {
+    ButtonElement btn = e.target;
+    if (show_done) {
+      show_done = false;
+      btn.text = "Show ALL";
+      UI.renderTodos(todos);
+    } else {
+      show_done = true;
+      btn.text = "Show Unfinished only";
+      UI.renderTodos(todos);
+    }
+  }
+
+  static void renderTodos(Map<int, Todo> todos) {
+    thingsList.children.clear();
+    for (var todo in todos.values) {
+      if (!show_done && todo.done) {
+        continue;
+      }
+      var newToDo = new LIElement();
+      var div = new DivElement();
+
+      var checkBox = new CheckboxInputElement();
+      var radioButton = new RadioButtonInputElement();
+      var innerDiv = new DivElement();
+      innerDiv.text = todo.name;
+      innerDiv.style.setProperty("display", 'inline-block');
+      radioButton.checked = false;
+      checkBox.id = todo.key;
+      checkBox.onChange.listen(Actions.doneOrUndoneTodo);
+      radioButton.onClick.listen(Actions.toggleTick);
+      if (todo.done) {
+        checkBox.checked = true;
+      }
+      div.children.add(radioButton);
+      div.children.add(innerDiv);
+      div.children.add(checkBox);
+      //div.children.add(newToDo);
+      newToDo.children.add(div);
+      //div.children.add(checkBox);
+      thingsList.children.add(newToDo);
+    }
+  }
+}
+
 class Config {
   static String db_name = "exsimple";
   static String todos_table_name = "todos";
@@ -73,11 +176,13 @@ class Todo {
   var key;
   String name;
   DateTime addedOn;
+  int cost;
   bool done;
 
   Todo(String name) {
     this.name = name;
     this.addedOn = new DateTime.now();
+    this.cost = 0;
     this.key = null;
     this.done = false;
   }
@@ -86,10 +191,16 @@ class Todo {
       : key = dbkey,
         name = value['name'],
         addedOn = DateTime.parse(value['addedOn']),
-        done = value['done'] {}
+        done = value['done'],
+        cost = value['cost'] {}
 
   Map toRaw() {
-    return {'name': name, 'addedOn': addedOn.toString(), 'done': done};
+    return {
+      'name': name,
+      'addedOn': addedOn.toString(),
+      'done': done,
+      'cost': cost
+    };
   }
 
   void remove() {
@@ -149,68 +260,27 @@ class Todo {
   }
 }
 
-void clearTodo(Event e) {
-  Todo.clear().then((_) {
-    todos.clear();
-    renderTodos(todos);
-  });
+
+
+
+
+
+void tick(){
+  /*
+   * 1. Check the current ticking job.
+   * 2. tock it.
+   * 3. Tick new one.
+   */
+}
+void tock() {
+  /*
+   * 1. Make sure ticking one is exactly the one in db
+   * 2. Write record into timesheet
+   * 3. Sum up cost.
+   */
 }
 
-void addTodo(Event e) {
-  var name = thingInput.value;
-  thingInput.value = '';
-  Todo todo = new Todo(name);
-  todo.store().then((Todo todo) {
-    todos[todo.key] = todo;
-    renderTodos(todos);
-  });
-}
 
-void doneOrUndoneTodo(Event e) {
-  CheckboxInputElement box = e.target;
-  var key = box.id;
-  Todo todo = todos[int.parse(key)];
-  if (box.checked) {
-    todo.finish().then((_) {
-      box.checked = true;
-    });
-  } else {
-    todo.undone().then((_) {
-      box.checked = false;
-    });
-  }
-}
-
-void renderTodos(Map<int, Todo> todos) {
-  thingsList.children.clear();
-  for (var todo in todos.values) {
-    if (!show_done && todo.done) {
-      continue;
-    }
-    var newToDo = new LIElement();
-    var div = new DivElement();
-
-    var checkBox = new CheckboxInputElement();
-    var radioButton = new RadioButtonInputElement();
-    var innerDiv = new DivElement();
-    innerDiv.text = todo.name;
-    innerDiv.style.setProperty("display", 'inline-block');
-    radioButton.checked = false;
-    checkBox.id = todo.key;
-    checkBox.onChange.listen(doneOrUndoneTodo);
-
-    if (todo.done) {
-      checkBox.checked = true;
-    }
-    div.children.add(radioButton);
-    div.children.add(innerDiv);
-    div.children.add(checkBox);
-    //div.children.add(newToDo);
-    newToDo.children.add(div);
-    //div.children.add(checkBox);
-    thingsList.children.add(newToDo);
-  }
-}
 
 Future<idb.Database> open(String db_name) {
   return window.indexedDB
@@ -222,7 +292,7 @@ void _loadFromDB(idb.Database db) {
   Config._db = db;
   Todo.all().then((Map<int, Todo> loadedTodos) {
     todos = loadedTodos;
-    renderTodos(todos);
+    UI.renderTodos(todos);
   });
 }
 
@@ -240,25 +310,13 @@ void main() {
     return;
   }
 
-  thingInput.onChange.listen(addTodo);
-  clearButton.onClick.listen(clearTodo);
-  showAllButton.onClick.listen(toggleShowAll);
+  thingInput.onChange.listen(Actions.addTodo);
+  clearButton.onClick.listen(Actions.clearTodo);
+  showAllButton.onClick.listen(UI.toggleShowAll);
   //loadThings();
 }
 
 
-void toggleShowAll(Event e) {
-  ButtonElement btn = e.target;
-  if (show_done) {
-    show_done = false;
-    btn.text = "Show ALL";
-    renderTodos(todos);
-  } else {
-    show_done = true;
-    btn.text = "Show Unfinished only";
-    renderTodos(todos);
-  }
-}
 /*
  * structure of this small app
  *
